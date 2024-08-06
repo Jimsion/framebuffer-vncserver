@@ -22,6 +22,16 @@
 #include "touch.h"
 #include "logging.h"
 
+struct tslib_cali_param{
+    int64_t param[7];
+    int64_t Xres;
+    int64_t Yres;
+    int64_t rot;
+    int64_t scale;
+    int64_t xoff;
+    int64_t yoff;
+};
+
 //static char TOUCH_DEVICE[256] = "/dev/input/event2";
 static int touchfd = -1;
 
@@ -29,13 +39,14 @@ static int xmin, xmax;
 static int ymin, ymax;
 static int rotate;
 static int trkg_id = -1;
+static struct tslib_cali_param cali_param = {};
 
 #ifndef input_event_sec
 #define input_event_sec time.tv_sec
 #define input_event_usec time.tv_usec
 #endif
 
-int init_touch(const char *touch_device, int vnc_rotate)
+int init_touch(const char *touch_device, int vnc_rotate, const char *tslib_calibfile)
 {
     info_print("Initializing touch device %s ...\n", touch_device);
     struct input_absinfo info;
@@ -62,6 +73,58 @@ int init_touch(const char *touch_device, int vnc_rotate)
     rotate = vnc_rotate;
 
     info_print("  x:(%d %d)  y:(%d %d) \n", xmin, xmax, ymin, ymax);
+
+    info_print("tslib_calibfile: Init tslib calibration file.\n");
+
+	FILE *pcal_fd;
+	int index;
+    
+	/* Use default values that leave ts numbers unchanged after transform */
+	cali_param.param[0] = 1;
+	cali_param.param[1] = 0;
+	cali_param.param[2] = 0;
+	cali_param.param[3] = 0;
+	cali_param.param[4] = 1;
+	cali_param.param[5] = 0;
+	cali_param.param[6] = 1;
+    cali_param.Xres     = 0;
+    cali_param.Yres     = 0;
+    cali_param.rot      = 0;
+    cali_param.scale    = 1;
+    cali_param.xoff     = 0;
+    cali_param.yoff     = 0;
+
+	if (tslib_calibfile != NULL){
+        pcal_fd = fopen(tslib_calibfile, "r");
+		if (pcal_fd) {
+            for (index = 0; index < 7; index++){
+                if (fscanf(pcal_fd, "%ld", &cali_param.param[index]) != 1){
+                    info_print("tslib_calibfile: read parameter fail.\n");
+                    break;
+                }
+            }   
+
+            if (!fscanf(pcal_fd, "%ld %ld", &cali_param.Xres, &cali_param.Yres)){
+                info_print("tslib_calibfile: read resolution fail.\n");
+            }
+
+            if (!fscanf(pcal_fd, "%ld", &cali_param.rot)){
+                info_print("tslib_calibfile: read rotation fail.\n");
+            }            
+            fclose(pcal_fd);
+
+            // preprocess
+            cali_param.scale = cali_param.param[0]*cali_param.param[4] - cali_param.param[1]*cali_param.param[3];
+            cali_param.xoff = cali_param.param[1]*cali_param.param[5] - cali_param.param[2]*cali_param.param[4];
+            cali_param.yoff = cali_param.param[2]*cali_param.param[3] - cali_param.param[0]*cali_param.param[5];
+
+            info_print("tslib_calibfile: scale:%ld, xoff:%ld, yoff:%ld.\n", cali_param.scale, cali_param.xoff, cali_param.yoff);
+		}else{            
+            info_print("tslib_calibfile: fopen fail.\n");
+        }
+    }else{
+        info_print("tslib_calibfile not found.\n");
+    }
     return 1;
 }
 
@@ -76,32 +139,14 @@ void cleanup_touch()
 void injectTouchEvent(enum MouseAction mouseAction, int x, int y, struct fb_var_screeninfo *scrinfo)
 {
     struct input_event ev;
-    int xin = x;
-    int yin = y;
+    int64_t xin = x;
+    int64_t yin = y;
+            
+    const int64_t dX = (cali_param.param[6]*(cali_param.param[4]*xin - cali_param.param[1]*yin) + cali_param.xoff) / cali_param.scale;
+    const int64_t dY = (cali_param.param[6]*(cali_param.param[0]*yin - cali_param.param[3]*xin) + cali_param.yoff) / cali_param.scale;
 
-    switch (rotate)
-    {
-    case 90:
-        x = yin;
-        y = scrinfo->yres - 1 - xin;
-        break;
-    case 180:
-        x = scrinfo->xres - 1 - xin;
-        y = scrinfo->yres - 1 - yin;
-        break;
-    case 270:
-        x = scrinfo->xres - 1 - yin;
-        y = xin;
-        break;
-    }
-
-    // Calculate the final x and y
-    /* Fake touch screen always reports zero */
-    //???//if (xmin != 0 && xmax != 0 && ymin != 0 && ymax != 0)
-    {
-        x = xmin + (x * (xmax - xmin)) / (scrinfo->xres);
-        y = ymin + (y * (ymax - ymin)) / (scrinfo->yres);
-    }
+    x = (int)dX;
+    y = (int)dY;
 
     memset(&ev, 0, sizeof(ev));
 

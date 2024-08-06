@@ -54,6 +54,7 @@ static char fb_device[256] = "/dev/fb0";
 static char touch_device[256] = "";
 static char kbd_device[256] = "";
 static char mouse_device[256] = "";
+static char tslib_calibfile[256] = "/etc/pointercal";
 
 static struct fb_var_screeninfo var_scrinfo;
 static struct fb_fix_screeninfo fix_scrinfo;
@@ -605,6 +606,7 @@ void print_usage(char **argv)
                "-r degrees: framebuffer rotation, default is 0\n"
                "-R degrees: touchscreen rotation, default is same as framebuffer rotation\n"
                "-F FPS: Maximum target FPS, default is 10\n"
+               "-C path: touchscreen TSLib calibration file path (example:/etc/pointercal)\n"
                "-v: verbose\n"
                "-h: print this help\n",
                *argv);
@@ -617,7 +619,7 @@ int main(int argc, char **argv)
         int i = 1;
         while (i < argc)
         {
-            if (*argv[i] == '-')
+            if (*argv[i] == '-' && (strlen(argv[i]) == 2))
             {
                 switch (*(argv[i] + 1))
                 {
@@ -664,6 +666,11 @@ int main(int argc, char **argv)
                     if (argv[i])
                         target_fps = atoi(argv[i]);
                     break;
+                case 'C':
+                    i++;
+                    if (argv[i])
+                        strcpy(tslib_calibfile, argv[i]);
+                    break;
                 case 'v':
                     verbose = 1;
                     break;
@@ -699,7 +706,7 @@ int main(int argc, char **argv)
     else if (strlen(touch_device) > 0)
     {
         // init touch only if there is a touch device defined
-        int ret = init_touch(touch_device, touch_rotate);
+        int ret = init_touch(touch_device, touch_rotate, tslib_calibfile);
         enable_touch = (ret > 0);
     }
     else if(strlen(mouse_device) > 0)
