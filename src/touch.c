@@ -109,6 +109,7 @@ void injectTouchEvent(enum MouseAction mouseAction, int x, int y, struct fb_var_
     bool sendTouch;
     int trkIdValue;
     int touchValue;
+    int pressure;
     struct timeval time;
 
     switch (mouseAction)
@@ -118,16 +119,19 @@ void injectTouchEvent(enum MouseAction mouseAction, int x, int y, struct fb_var_
         sendTouch = true;
         trkIdValue = ++trkg_id;
         touchValue = 1;
+        pressure = 255;
         break;
     case MouseRelease:
         sendPos = false;
         sendTouch = true;
         trkIdValue = -1;
         touchValue = 0;
+        pressure = 0;
         break;
     case MouseDrag:
         sendPos = true;
         sendTouch = false;
+        pressure = 255;
         break;
     default:
         error_print("invalid mouse action\n");
