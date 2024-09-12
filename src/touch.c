@@ -259,6 +259,19 @@ void injectTouchEvent(enum MouseAction mouseAction, int x, int y, struct fb_var_
         {
             error_print("write event failed, %s\n", strerror(errno));
         }
+
+    }
+
+    // Then send the ABS_PRESSURE
+    gettimeofday(&time, 0);
+    ev.input_event_sec = time.tv_sec;
+    ev.input_event_usec = time.tv_usec;
+    ev.type = EV_ABS;
+    ev.code = ABS_PRESSURE;
+    ev.value = pressure;
+    if (write(touchfd, &ev, sizeof(ev)) < 0)
+    {
+        error_print("write event failed, %s\n", strerror(errno));
     }
 
     // Finally send the SYN
