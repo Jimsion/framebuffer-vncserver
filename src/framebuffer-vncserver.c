@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <unistd.h>
 #include <sys/mman.h>
@@ -56,6 +57,7 @@ static char kbd_device[256] = "";
 static char mouse_device[256] = "";
 static char tslib_calibfile[256] = "/etc/pointercal";
 static char desktop_name[256] = "framebuffer";
+static char passwords[2][256] = {"", ""};
 
 static struct fb_var_screeninfo var_scrinfo;
 static struct fb_fix_screeninfo fix_scrinfo;
@@ -74,6 +76,7 @@ static unsigned int bits_per_pixel;
 static unsigned int frame_size;
 static unsigned int fb_xres;
 static unsigned int fb_yres;
+static bool setting_passwords = FALSE;
 int verbose = 0;
 
 #define UNUSED(x) (void)(x)
@@ -252,6 +255,14 @@ static void init_fb_server(int argc, char **argv, rfbBool enable_touch, rfbBool 
     server->alwaysShared = TRUE;
     server->httpDir = NULL;
     server->port = vnc_port;
+
+    if(setting_passwords){
+        char **passwds = malloc(sizeof(char**)*2);
+	    passwds[0] = passwords[0];
+	    passwds[1] = passwords[1];
+	    server->authPasswdData = (void*)passwds;
+	    server->passwordCheck = rfbCheckPasswordByList;
+    }
 
     server->kbdAddEvent = keyevent;
     if (enable_touch)
@@ -609,6 +620,7 @@ void print_usage(char **argv)
                "-F FPS: Maximum target FPS, default is 10\n"
                "-C path: touchscreen TSLib calibration file path (example:/etc/pointercal)\n"
                "-N desktop name: VNC desktop name, default is framebuffer\n"
+               "-P passwords: full control and view only passwords, split by ','. (example:aaa,bbb)\n"
                "-v: verbose\n"
                "-h: print this help\n",
                *argv);
@@ -677,6 +689,31 @@ int main(int argc, char **argv)
                     i++;
                     if (argv[i])
                         strcpy(desktop_name, argv[i]);
+                    break;
+                case 'P':
+                    i++;
+                    if (argv[i]){
+                        setting_passwords = TRUE;
+                        memset(passwords[0], 0, 256);
+                        memset(passwords[1], 0, 256);
+                        char *pwd_start = argv[i];
+                        char *pwd_end = argv[i];
+                        int count = 0;
+                        while (*pwd_end){
+                            if (*pwd_end == ','){
+                                if(pwd_end != pwd_start){
+                                    strncpy(passwords[count], pwd_start, (pwd_end-pwd_start));
+                                }
+                                count++;
+                                pwd_start = (pwd_end+1);
+                            }
+                            pwd_end++;
+                        }
+
+                        // last one
+                        strncpy(passwords[count], pwd_start, (pwd_end-pwd_start));
+                        info_print("PWD:[%s][%s]", passwords[0], passwords[1]);
+                    }
                     break;
                 case 'v':
                     verbose = 1;
