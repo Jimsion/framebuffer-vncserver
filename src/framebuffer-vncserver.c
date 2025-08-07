@@ -55,6 +55,7 @@ static char touch_device[256] = "";
 static char kbd_device[256] = "";
 static char mouse_device[256] = "";
 static char tslib_calibfile[256] = "/etc/pointercal";
+static char desktop_name[256] = "framebuffer";
 
 static struct fb_var_screeninfo var_scrinfo;
 static struct fb_fix_screeninfo fix_scrinfo;
@@ -246,7 +247,7 @@ static void init_fb_server(int argc, char **argv, rfbBool enable_touch, rfbBool 
     server = rfbGetScreen(&argc, argv, fb_xres, fb_yres, BITS_PER_SAMPLE, SAMPLES_PER_PIXEL, rbytespp);
     assert(server != NULL);
 
-    server->desktopName = "framebuffer";
+    server->desktopName = desktop_name;
     server->frameBuffer = (char *)vncbuf;
     server->alwaysShared = TRUE;
     server->httpDir = NULL;
@@ -607,6 +608,7 @@ void print_usage(char **argv)
                "-R degrees: touchscreen rotation, default is same as framebuffer rotation\n"
                "-F FPS: Maximum target FPS, default is 10\n"
                "-C path: touchscreen TSLib calibration file path (example:/etc/pointercal)\n"
+               "-N desktop name: VNC desktop name, default is framebuffer\n"
                "-v: verbose\n"
                "-h: print this help\n",
                *argv);
@@ -670,6 +672,11 @@ int main(int argc, char **argv)
                     i++;
                     if (argv[i])
                         strcpy(tslib_calibfile, argv[i]);
+                    break;
+                case 'N':
+                    i++;
+                    if (argv[i])
+                        strcpy(desktop_name, argv[i]);
                     break;
                 case 'v':
                     verbose = 1;
