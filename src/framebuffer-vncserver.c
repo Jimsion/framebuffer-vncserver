@@ -316,6 +316,13 @@ int timeToLogFPS()
 #define PIXEL_FB_TO_RFB(p, r_offset, g_offset, b_offset) \
     ((p >> r_offset) & COLOR_MASK) | (((p >> g_offset) & COLOR_MASK) << BITS_PER_SAMPLE) | (((p >> b_offset) & COLOR_MASK) << (2 * BITS_PER_SAMPLE))
 
+
+#define BPP_TYPE 16
+#include "rotate_screen_template.h"
+
+#define BPP_TYPE 32
+#include "rotate_screen_template.h"
+
 static void update_screen(void)
 {
 #ifdef LOG_FPS
@@ -515,96 +522,13 @@ static void update_screen(void)
             }
         }
     }
+    else if (bits_per_pixel == 32)
+    {
+        RotateScreenBPP32();
+    }
     else if (bits_per_pixel == 16)
     {
-        uint16_t *f = (uint16_t *)fbmmap; /* -> framebuffer         */
-        uint16_t *c = (uint16_t *)fbbuf;  /* -> compare framebuffer */
-        uint16_t *r = (uint16_t *)vncbuf; /* -> remote framebuffer  */
-
-        switch (vnc_rotate)
-        {
-        case 0:
-        case 180:
-            server->width = fb_xres;
-            server->height = fb_yres;
-            server->paddedWidthInBytes = fb_xres * bytespp;
-            break;
-
-        case 90:
-        case 270:
-            server->width = fb_yres;
-            server->height = fb_xres;
-            server->paddedWidthInBytes = fb_yres * bytespp;
-            break;
-        }
-
-        if (memcmp(fbmmap, fbbuf, frame_size) != 0)
-        {
-            int fb_offset = 0;
-            int y;
-            for (y = 0; y < (int)fb_yres; y++)
-            {
-                f = (uint16_t *)fbmmap + fb_offset;
-                c = (uint16_t *)fbbuf  + fb_offset;
-                /* Compare every pixels at a time */
-                int x;
-                for (x = 0; x < (int)fb_xres; x++)
-                {
-                    uint16_t pixel = *f;
-
-                    if (pixel != *c)
-                    {
-                        int x2, y2;
-
-                        *c = pixel;
-                        switch (vnc_rotate)
-                        {
-                        case 0:
-                            x2 = x;
-                            y2 = y;
-                            break;
-
-                        case 90:
-                            x2 = fb_yres - 1 - y;
-                            y2 = x;
-                            break;
-
-                        case 180:
-                            x2 = fb_xres - 1 - x;
-                            y2 = fb_yres - 1 - y;
-                            break;
-
-                        case 270:
-                            x2 = y;
-                            y2 = fb_xres - 1 - x;
-                            break;
-                        default:
-                            error_print("rotation is invalid\n");
-                            exit(EXIT_FAILURE);
-                        }
-
-                        r[y2 * server->width + x2] = PIXEL_FB_TO_RFB(pixel, varblock.r_offset, varblock.g_offset, varblock.b_offset);
-
-                        if (x2 < varblock.min_i)
-                            varblock.min_i = x2;
-                        else
-                        {
-                            if (x2 > varblock.max_i)
-                                varblock.max_i = x2;
-
-                            if (y2 > varblock.max_j)
-                                varblock.max_j = y2;
-                            else if (y2 < varblock.min_j)
-                                varblock.min_j = y2;
-                        }
-                    }
-
-                    f++;
-                    c++;
-                }
-                fb_offset += fb_xres_line;
-            }
-        }
+        RotateScreenBPP16();
     }
     else
     {
