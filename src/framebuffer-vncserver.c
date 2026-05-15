@@ -74,6 +74,7 @@ static rfbScreenInfoPtr server;
 static size_t bytespp;
 static unsigned int bits_per_pixel;
 static unsigned int frame_size;
+static unsigned int fb_xres_line;
 static unsigned int fb_xres;
 static unsigned int fb_yres;
 static bool setting_passwords = FALSE;
@@ -125,16 +126,17 @@ static void init_fb(void)
      * This prevents the screen from 'smearing' on 1366 x 768 displays
      */
 
-    fb_xres = fix_scrinfo.line_length / (var_scrinfo.bits_per_pixel / 8.0);
+    fb_xres_line = fix_scrinfo.line_length / (var_scrinfo.bits_per_pixel / 8.0);
+    fb_xres = var_scrinfo.xres;
     fb_yres = var_scrinfo.yres;
 
-    pixels = fb_xres * fb_yres;
+    pixels = fb_xres_line * fb_yres;
     bytespp = var_scrinfo.bits_per_pixel / 8;
     bits_per_pixel = var_scrinfo.bits_per_pixel;
     frame_size = pixels * bits_per_pixel / 8;
 
-    info_print("  xres=%d, yres=%d, xresv=%d, yresv=%d, xoffs=%d, yoffs=%d, bpp=%d\n",
-               (int)fb_xres, (int)fb_yres,
+    info_print("  xres_line=%d, xres=%d, yres=%d, xresv=%d, yresv=%d, xoffs=%d, yoffs=%d, bpp=%d\n",
+               (int)fb_xres_line, (int)fb_xres, (int)fb_yres,
                (int)var_scrinfo.xres_virtual, (int)var_scrinfo.yres_virtual,
                (int)var_scrinfo.xoffset, (int)var_scrinfo.yoffset,
                (int)var_scrinfo.bits_per_pixel);
@@ -142,6 +144,9 @@ static void init_fb(void)
                (int)var_scrinfo.red.offset, (int)var_scrinfo.red.length,
                (int)var_scrinfo.green.offset, (int)var_scrinfo.green.length,
                (int)var_scrinfo.blue.offset, (int)var_scrinfo.blue.length);
+
+    info_print("  pixels=%d bytespp=%d bits_per_pixel=%d frame_size=%d\n",
+               (int)pixels, (int)bytespp, (int)bits_per_pixel, (int)frame_size);
 
     fbmmap = mmap(NULL, frame_size, PROT_READ, MAP_SHARED, fbfd, 0);
 
@@ -385,9 +390,14 @@ static void update_screen(void)
         int xstep = 8;
         if (memcmp(fbmmap, fbbuf, frame_size) != 0)
         {
+            int fb_offset = 0;
+            int vncb_offset = 0;
             int y;
             for (y = 0; y < (int)fb_yres; y++)
             {
+                f = (uint8_t *)fbmmap + fb_offset;
+                c = (uint8_t *)fbbuf  + fb_offset;
+                r = (uint8_t *)vncbuf + vncb_offset;
                 int x;
                 for (x = 0; x < (int)fb_xres; x += xstep)
                 {
@@ -419,6 +429,8 @@ static void update_screen(void)
                     c += 1;
                     r += 8;
                 }
+                fb_offset += fb_xres_line;
+                vncb_offset += fb_xres;
             }
         }
     }
@@ -434,9 +446,15 @@ static void update_screen(void)
 
             int xstep = 4 / bytespp;
 
+            int fb_offset = 0;
+            int vncb_offset = 0;
             int y;
             for (y = 0; y < (int)fb_yres; y++)
             {
+                // int offset = y * fb_xres_line;
+                f = (uint32_t *)fbmmap + fb_offset;
+                c = (uint32_t *)fbbuf  + fb_offset;
+                r = (uint32_t *)vncbuf + vncb_offset;
                 /* Compare every 1/2/4 pixels at a time */
                 int x;
                 for (x = 0; x < (int)fb_xres; x += xstep)
@@ -492,6 +510,8 @@ static void update_screen(void)
                     c++;
                     r++;
                 }
+                fb_offset += fb_xres_line;
+                vncb_offset += fb_xres;
             }
         }
     }
@@ -520,9 +540,12 @@ static void update_screen(void)
 
         if (memcmp(fbmmap, fbbuf, frame_size) != 0)
         {
+            int fb_offset = 0;
             int y;
             for (y = 0; y < (int)fb_yres; y++)
             {
+                f = (uint16_t *)fbmmap + fb_offset;
+                c = (uint16_t *)fbbuf  + fb_offset;
                 /* Compare every pixels at a time */
                 int x;
                 for (x = 0; x < (int)fb_xres; x++)
@@ -579,6 +602,7 @@ static void update_screen(void)
                     f++;
                     c++;
                 }
+                fb_offset += fb_xres_line;
             }
         }
     }
@@ -765,6 +789,7 @@ int main(int argc, char **argv)
     }
 
     info_print("Initializing VNC server:\n");
+    info_print("	width_line:  %d\n", (int)fb_xres_line);
     info_print("	width:  %d\n", (int)fb_xres);
     info_print("	height: %d\n", (int)fb_yres);
     info_print("	bpp:    %d\n", (int)var_scrinfo.bits_per_pixel);
